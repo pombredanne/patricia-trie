@@ -28,15 +28,17 @@ License: Apache License v2 (http://www.apache.org/licenses/LICENSE-2.0.html)
 """
 
 __author__ = 'Florian Leitner <florian.leitner@gmail.com>'
-__version__ = '8'
+__version__ = '10'
 
 
-class _NonTerminal(): pass
+class _NonTerminal():
+    pass
 
 
 __NON_TERMINAL__ = _NonTerminal()
 
-# recursive functions
+# recursion functions
+
 
 def _count(node):
     "Count the number of terminal nodes in this branch."
@@ -71,7 +73,6 @@ def _values(node):
         for value in _values(child):
             yield value
 
-# main class
 
 class trie():
     """
@@ -135,12 +136,27 @@ class trie():
         for key, val in branch.items():
             self[key] = val
 
+    @staticmethod
+    def __offsets(strlen, start, end):
+        # Return the correct start, end offsets for a string of length `strlen`.
+        return (max(0, strlen + start) if start < 0 else start,
+                strlen if end is None else end)
+
+    @staticmethod
+    def __check(value, match, default):
+        if value is not __NON_TERMINAL__:
+            return match, value
+        elif default is not __NON_TERMINAL__:
+            return None, default
+        else:
+            raise KeyError(match)
+
     def _find(self, path, start, *end):
-        if path[start] in self._edges:
+        if start < len(path) and path[start] in self._edges:
             edge, child = self._edges[path[start]]
             if path.startswith(edge, start, *end):
                 return child, start + len(edge)
-        return None, start # return None
+        return None, start  # return None
 
     def _next(self, path, start, *end):
         try:
@@ -149,12 +165,11 @@ class trie():
                 return child, start + len(edge)
         except KeyError:
             pass
-        raise KeyError(path) # raise error
+        raise KeyError(path)  # raise error
 
     def _scan(self, rvalFun, string, start=0, *end):
         node = self
-        if start < 0:
-            start = max(0, len(string) + start)
+        start, _ = trie.__offsets(len(string), start, None)
         while node is not None:
             if node._value is not __NON_TERMINAL__:
                 yield rvalFun(string, start, node._value)
@@ -166,28 +181,29 @@ class trie():
         idx = 0
         while keylen != idx:
             if key[idx] in node._edges:
-                edge, child = node._edges[key[idx]]
-                if key.startswith(edge, idx):
-                    # the whole prefix matches; advance
-                    node = child
-                    idx += len(edge)
-                else:
-                    # split edge after the matching part of the key
-                    pos = 1
-                    last = min(len(edge), keylen - idx)
-                    while pos < last and edge[pos] == key[idx + pos]:
-                        pos += 1
-                    split = trie()
-                    split._edges[edge[pos]] = (edge[pos:], child)
-                    node._edges[key[idx]] = (edge[:pos], split)
-                    node = split
-                    idx += pos
+                node, idx = node.__followEdge(key, idx)
             else:
                 # no common prefix, create a new edge and (leaf) node
                 node._edges[key[idx]] = (key[idx:], trie(value))
                 break
         else:
             node._value = value
+
+    def __followEdge(self, key, idx):
+        edge, child = self._edges[key[idx]]
+        if key.startswith(edge, idx):
+            # the whole prefix matches; advance
+            return child, idx + len(edge)
+        else:
+            # split edge after the matching part of the key
+            pos = 1
+            last = min(len(edge), len(key) - idx)
+            while pos < last and edge[pos] == key[idx + pos]:
+                pos += 1
+            split = trie()
+            split._edges[edge[pos]] = (edge[pos:], child)
+            self._edges[key[idx]] = (edge[:pos], split)
+            return split, idx + pos
 
     def __getitem__(self, key):
         node = self
@@ -256,7 +272,8 @@ class trie():
         if l == 0:
             return _keys(self, [])
         else:
-            if l == 1: scan = (scan[0], 0)
+            if l == 1:
+                scan = (scan[0], 0)
             getKey = lambda string, idx, value: string[scan[1]:idx]
             return self._scan(getKey, *scan)
 
@@ -278,7 +295,8 @@ class trie():
         if l == 0:
             return _values(self)
         else:
-            if l == 1: scan = (scan[0], 0)
+            if l == 1:
+                scan = (scan[0], 0)
             getValue = lambda string, idx, value: value
             return self._scan(getValue, *scan)
 
@@ -291,9 +309,7 @@ class trie():
         """
         node = self
         strlen = len(string)
-        if start < 0:
-            start = max(0, strlen + start)
-        end = strlen if end is None else end
+        start, end = trie.__offsets(strlen, start, end)
         idx = start
         last = self._value
         while idx < strlen:
@@ -302,12 +318,7 @@ class trie():
                 break
             elif node._value is not __NON_TERMINAL__:
                 last = node._value
-        if last is not __NON_TERMINAL__:
-            return string[start:idx], last
-        elif default is not __NON_TERMINAL__:
-            return None, default
-        else:
-            raise KeyError(string[start:idx])
+        return trie.__check(last, string[start:idx], default)
 
     def items(self, *scan):
         """
@@ -318,7 +329,8 @@ class trie():
         if l == 0:
             return _items(self, [])
         else:
-            if l == 1: scan = (scan[0], 0)
+            if l == 1:
+                scan = (scan[0], 0)
             getItem = lambda string, idx, value: (string[scan[1]:idx], value)
             return self._scan(getItem, *scan)
 
@@ -349,8 +361,12 @@ class trie():
                 node, idx = node._next(prefix, idx)
             except KeyError:
                 break
+        return node._accumulate(prefix, idx)
+
+    def _accumulate(self, prefix, idx):
+        node = self
         accu = [prefix]
-        if idx != plen:
+        if idx != len(prefix):
             remainder = prefix[idx:]
             for edge, child in node._edges.values():
                 if edge.startswith(remainder):

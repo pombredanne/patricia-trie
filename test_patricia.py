@@ -9,7 +9,8 @@ from unittest import main, TestCase
 from patricia import trie, _NonTerminal
 
 __author__ = 'Florian Leitner'
-__version__ = 1
+__version__ = 9
+
 
 class TrieTests(TestCase):
     def testInitContains(self):
@@ -50,6 +51,12 @@ class TrieTests(TestCase):
         T[''] = 0
         self.assertEqual(sorted(['', 'fool', 'ba', 'baz']), sorted(list(T)))
 
+    def testSingleEntry(self):
+        T = trie(foo=5)
+        self.assertListEqual(['foo'], list(T.keys()))
+        self.assertListEqual([5], list(T.values()))
+        self.assertListEqual([('foo', 5)], list(T.items()))
+
     def testValues(self):
         T = trie()
         T['ba'] = 2
@@ -80,6 +87,12 @@ class TrieTests(TestCase):
         T[''] = 0
         self.assertEqual(('', 0), T.item(''))
         self.assertEqual('', T.key('foo'))
+
+    def testGetExactMatch(self):
+        T = trie(exact=5)
+        self.assertListEqual(['exact'], list(T.keys('exact')))
+        self.assertListEqual([5], list(T.values('exact')))
+        self.assertListEqual([('exact', 5)], list(T.items('exact')))
 
     def testFakeDefault(self):
         T = trie()
@@ -157,7 +170,7 @@ class TrieTests(TestCase):
         T = trie(foo=1, bar=2)
         self.assertEqual('foo', T.key('foo', -3))
         self.assertEqual('foo', T.key('foo', -4))
-        self.assertEqual(None, T.key('foo', -4, 3, None))
+        self.assertEqual('foo', T.key('foo', -4, 3))
         self.assertEqual(None, T.key('foo', -3, -4, None))
         self.assertEqual(None, T.key('foo', -4, -4, None))
 
